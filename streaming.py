@@ -15,6 +15,8 @@ consumer_secret=""
 access_token=""
 access_token_secret=""
 
+# Set the default character encoding to utf-8
+sys.setdefaultencoding('utf-8')
 
 # Global variables
 credentials_file = "./credentials.ini" # Assume in local directory
