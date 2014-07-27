@@ -15,9 +15,6 @@ consumer_secret=""
 access_token=""
 access_token_secret=""
 
-# Set the default character encoding to utf-8
-sys.setdefaultencoding('utf-8')
-
 # Global variables
 credentials_file = "./credentials.ini" # Assume in local directory
 TWEETS_PER_FILE = 1000000 # Number of tweets to store before creating a new file
