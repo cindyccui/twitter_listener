@@ -11,6 +11,17 @@ import gzip # For compressing files
 import os
 import json
 
+def fix(text):
+    """Encodes a string as unicode and replaces difficult characters. Also checks for and removes
+    things that will break the csv file like newline characters.
+    Also adds quote characters around strings.
+    If the given 'text' doesn't have an encode method (e.g. it is a number) then it is just returned
+    as a string (using str)."""
+    try: 
+        return '"'+text.encode(encoding='UTF-8', errors='xmlcharrefreplace').replace("\n"," ")+'"'
+    except AttributeError:
+        return str(text)
+
 
 
 # A list to store the fields to retrieve from the json files. Start with some commonly used fields.
@@ -67,30 +78,52 @@ print "Will write output to: ",args.outfile
 with open(args.outfile, 'w') as of:
 
     for i, fname in enumerate(args.files):
-        # work out if it is a compressed file or plain text
-        f = None
-        if fname[:-3] == ".gz":
-            f = GzipFile(fname, mode="rb")
-        else:
-            f = open(fname, "r")
+        # work out if it is a compressed file or plain text and then open as a file object called
+        # 'f'. (gzip and normal files can be treated the same)
+        with GzipFile(fname, mode="rb") if fname[:-3] == ".gz" else open(fname, "r") as f:
 
-        print "Interrogating file {i}/{num}: {f}".format(i=i, num=len(args.files), f=f.name)
+        #f = None
+        #if fname[:-3] == ".gz":
+        #    f = GzipFile(fname, mode="rb")
+        #else
+        # There is no data for this field in this tweet:
+        #    f = open(fname, "r")
 
-        # If this is the first file, prepare the output file
-        if i==0:
-            for field in fields:
-                of.write(field.replace(",","-") +", ")
-            # Also add the extra time columns (added for convenience)
-            if not args.no_time_columns:
-                of.write("Year, Month, Day, Hour, Minute, Seconds")
-            of.write("\n")
+            print "Interrogating file {i}/{num}: {f}".format(i=(i+1), num=len(args.files), f=f.name)
 
-        for line in f:
-            tweet = json.loads(line) # Create a json object from the tweet on the current line
-            
-            # For each field that we're interested in, extract the data and write to the file
-            for field in fields:
-                print field
+            # If this is the first file, prepare the output file
+            if i==0:
+                for field in fields:
+                    of.write(field.replace(",","-") +", ") # (note: no commas in fieldnames)
+                # Also add the extra time columns (added for convenience)
+                if not args.no_time_columns:
+                    of.write("Year, Month, Day, Hour, Minute, Seconds")
+                of.write("\n")
+
+            for line in f:
+                tweet = json.loads(line) # Create a dictionary from the tweet on the current line
+                
+                # For each field that we're interested in, extract the data and write to the file
+                for field in fields:
+                    nodata = False # Set to true if there is no data for this field
+                    # Need to do a multi-dimensional dictionary lookup from the string field (Sam P
+                    # helped me with this). I.e. convert 's = "user,name,firstname" to 
+                    # tweet["user"]["name"]["firstname"]
+                    value = tweet
+                    for key in field.split(","):
+                        if key not in tweet or value[key] == None:
+                            # There is no data for this field in this tweet
+                            #print "No data in tweet for field: {f}".format(f=field)
+                            nodata = True
+                            continue
+                        value = value[key]
+                    if nodata:
+                        of.write(" , ") # Nothing to write for this field
+                    else:
+                        of.write(fix(value)+", ")
+
+                of.write("\n") # Finished this message, on to next one
+
 
 
 
