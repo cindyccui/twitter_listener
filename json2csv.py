@@ -110,13 +110,23 @@ with open(args.outfile, 'w') as of:
                     # helped me with this). I.e. convert 's = "user,name,firstname" to 
                     # tweet["user"]["name"]["firstname"]
                     value = tweet
+                    print "\n* FIELD: {f}\n".format(f=field)
                     for key in field.split(","):
-                        if key not in tweet or value[key] == None:
+                        #print "KEY:",key, "\nVALUE",value
+                        if value == None:# or key not in value:
                             # There is no data for this field in this tweet
-                            #print "No data in tweet for field: {f}".format(f=field)
+                            print "No data in tweet for field: {f}".format(f=field)
+                            print "Value: '{v}'. Key: '{k}'".format(v=value, k=key)
                             nodata = True
-                            continue
-                        value = value[key]
+                            continue # Move onto the next field
+                        try:
+                            value = value[key]
+                        except TypeError: 
+                            # This happens if the key should be an integer. E.g. with coordinates,
+                            # instead of being a dictionary they are a two-element list
+                            value = value[int(key)]
+
+
                     if nodata:
                         of.write(" , ") # Nothing to write for this field
                     else:
