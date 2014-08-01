@@ -10,6 +10,14 @@ import argparse # For parsing command line arguments
 import gzip # For compressing files
 import os
 import json
+import sys
+
+import datetime as dt
+# Can't use dt.strptime() to convert time string to date because %z isn't valid! Instead use this:
+import email.utils 
+# NOTE ABOUT TIME ZONES: I'm using local time, not UTC. So there will be two kinks in the data when
+# UK changes time zone. Advantage is that work patterns are constant (e.g. 9am-5pm) so don't want to
+# change these when the time zone changes.
 
 def fix(text):
     """Encodes a string as unicode and replaces difficult characters. Also checks for and removes
@@ -67,9 +75,18 @@ if args.no_defaults:
 
 # XXXX add any specified columns to the fields that we're interested in
 
+if len(fields)==0:
+    print "No fields have been specified, you have probably set the '--no_defaults' flag "+\
+            "but not specified any of your own fields.\n"+\
+            "This is probably a mistake so I wont continue.\n"+\
+            "If you want to add fields yourself use --field"
+    sys.exit(1)
+
 print "Will write output to: ",args.outfile
 
+print "Will extract data in the following json fields: ",fields
 
+print "Will {s} time columns".format(s="not add" if args.no_time_columns else "add")
 
 
 
@@ -110,7 +127,7 @@ with open(args.outfile, 'w') as of:
                     # helped me with this). I.e. convert 's = "user,name,firstname" to 
                     # tweet["user"]["name"]["firstname"]
                     value = tweet
-                    print "\n* FIELD: {f}\n".format(f=field)
+                    #print "\n* FIELD: {f}\n".format(f=field)
                     for key in field.split(","):
                         #print "KEY:",key, "\nVALUE",value
                         if value == None:# or key not in value:
@@ -131,6 +148,19 @@ with open(args.outfile, 'w') as of:
                         of.write(" , ") # Nothing to write for this field
                     else:
                         of.write(fix(value)+", ")
+
+                # Have added all the required fields, now add time columns for convenience.This is
+                # much more complicated than it should be because the %z symbol in strftime()
+                # doesn't work on my mac, might work on unix. Instead use email.util library (!)
+
+                time_str = tweet['created_at']
+                # Make a tuple from the time (e.g. (year,month,day,hour,minute,second)
+                time_tpl = email.utils.parsedate_tz(time_str) 
+                # Now use those indivdual components to make a datetime object
+                time = dt.datetime(*[time_tpl[i] for i in range(7)]) 
+
+                print time_str, time
+                XXXX HERE ADD Separat columns for month etc...
 
                 of.write("\n") # Finished this message, on to next one
 
