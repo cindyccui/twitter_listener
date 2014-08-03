@@ -12,6 +12,9 @@ import os
 import json
 import sys
 
+import pprint # For pretty-printing errors
+pp = pprint.PrettyPrinter(depth=1)
+
 import datetime as dt
 # Can't use dt.strptime() to convert time string to date because %z isn't valid! Instead use this:
 import email.utils 
@@ -45,6 +48,10 @@ fields = [
         "text"                  # Message text
         ]
 
+# Remember number of errors (e.g. unrecognisable fields)
+error_fields = dict()
+error_count = 0
+
 # ****** Create the command-line parser ******
 parser = argparse.ArgumentParser(description='Convert JSON tweets to CSV.')
 
@@ -64,6 +71,8 @@ parser.add_argument('-nd', '--no_defaults', action="store_true", default=False,
         help="Don't add any of the default fields to the CSV output")
 parser.add_argument('-ntc', '--no_time_columns', action="store_true", default=False,
         help="Don't add the extra time columns to the CSV output")
+
+# Whether to run multi-threaded
 
 
 # Parse command-line arguments
@@ -114,7 +123,7 @@ with open(args.outfile, 'w') as of:
                     of.write(field.replace(",","-") +", ") # (note: no commas in fieldnames)
                 # Also add the extra time columns (added for convenience)
                 if not args.no_time_columns:
-                    of.write("Year, Month, Day, Hour, Minute, Seconds")
+                    of.write("Year, Month, Day, Hour, Minute, Second")
                 of.write("\n")
 
             for line in f:
@@ -132,9 +141,14 @@ with open(args.outfile, 'w') as of:
                         #print "KEY:",key, "\nVALUE",value
                         if value == None:# or key not in value:
                             # There is no data for this field in this tweet
-                            print "No data in tweet for field: {f}".format(f=field)
-                            print "Value: '{v}'. Key: '{k}'".format(v=value, k=key)
+                            #print "No data in tweet for field: {f}".format(f=field)
+                            #print "Value: '{v}'. Key: '{k}'".format(v=value, k=key)
                             nodata = True
+                            error_count += error_count
+                            if field in error_fields:
+                                error_fields[field] += 1
+                            else:
+                                error_fields[field] = 0
                             continue # Move onto the next field
                         try:
                             value = value[key]
@@ -149,23 +163,27 @@ with open(args.outfile, 'w') as of:
                     else:
                         of.write(fix(value)+", ")
 
-                # Have added all the required fields, now add time columns for convenience.This is
-                # much more complicated than it should be because the %z symbol in strftime()
-                # doesn't work on my mac, might work on unix. Instead use email.util library (!)
+                if not args.no_time_columns:
 
-                time_str = tweet['created_at']
-                # Make a tuple from the time (e.g. (year,month,day,hour,minute,second)
-                time_tpl = email.utils.parsedate_tz(time_str) 
-                # Now use those indivdual components to make a datetime object
-                time = dt.datetime(*[time_tpl[i] for i in range(7)]) 
+                    # Have added all the required fields, now add time columns for convenience.This is
+                    # much more complicated than it should be because the %z symbol in strftime()
+                    # doesn't work on my mac, might work on unix. Instead use email.util library (!)
 
-                print time_str, time
-                XXXX HERE ADD Separat columns for month etc...
+                    time_str = tweet['created_at']
+                    # Make a tuple from the time (e.g. (year,month,day,hour,minute,second)
+                    time_tpl = email.utils.parsedate_tz(time_str) 
+                    # Now use those indivdual components to make a datetime object
+                    t = dt.datetime(*[time_tpl[i] for i in range(7)]) 
+
+                    of.write("{Yr}, {Mo}, {D}, {H}, {M}, {S}".format( 
+                        Yr=t.year, Mo=t.month, D=t.day, M=t.minute, H=t.hour, S=t.second )
+                    )
 
                 of.write("\n") # Finished this message, on to next one
 
-
-
+print "Finished. There were a total of {e} fields that could not be extracted from the"+\
+        "json file. These are: ".format(e=error_count)
+pp.pprint(error_fields)
 
 
 
