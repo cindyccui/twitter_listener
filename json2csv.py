@@ -52,6 +52,80 @@ fields = [
 error_fields = dict()
 error_count = 0
 
+
+def read_json(fname, of):
+    """Reads an input json file, specified by 'fname'. Writes output to an output file ('of') that is
+    open and writeable (e.g. the result of open('out.csv','w') """
+    
+    global error_fields
+    global error_count
+
+    # work out if it is a compressed file or plain text and then open as a file object called
+    # 'f'. (gzip and normal files can be treated the same)
+    with gzip.GzipFile(fname, mode="rb") if fname[:-3] == ".gz" else open(fname, "r") as f:
+
+        print f
+
+        for line in f:
+            print line
+            tweet = json.loads(line) # Create a dictionary from the tweet on the current line
+            
+            # For each field that we're interested in, extract the data and write to the file
+            for field in fields:
+                nodata = False # Set to true if there is no data for this field
+                # Need to do a multi-dimensional dictionary lookup from the string field (Sam P
+                # helped me with this). I.e. convert 's = "user,name,firstname" to 
+                # tweet["user"]["name"]["firstname"]
+                value = tweet
+                #print "\n* FIELD: {f}\n".format(f=field)
+                for key in field.split(","):
+                    #print "KEY:",key, "\nVALUE",value
+                    if value == None:# or key not in value:
+                        # There is no data for this field in this tweet
+                        #print "No data in tweet for field: {f}".format(f=field)
+                        #print "Value: '{v}'. Key: '{k}'".format(v=value, k=key)
+                        nodata = True
+                        error_count += error_count
+                        if field in error_fields:
+                            error_fields[field] += 1
+                        else:
+                            error_fields[field] = 0
+                        continue # Move onto the next field
+                    try:
+                        value = value[key]
+                    except TypeError: 
+                        # This happens if the key should be an integer. E.g. with coordinates,
+                        # instead of being a dictionary they are a two-element list
+                        value = value[int(key)]
+
+
+                if nodata:
+                    of.write(" , ") # Nothing to write for this field
+                else:
+                    of.write(fix(value)+", ")
+
+            if not args.no_time_columns:
+
+                # Have added all the required fields, now add time columns for convenience.This is
+                # much more complicated than it should be because the %z symbol in strftime()
+                # doesn't work on my mac, might work on unix. Instead use email.util library (!)
+
+                time_str = tweet['created_at']
+                # Make a tuple from the time (e.g. (year,month,day,hour,minute,second)
+                time_tpl = email.utils.parsedate_tz(time_str) 
+                # Now use those indivdual components to make a datetime object
+                t = dt.datetime(*[time_tpl[i] for i in range(7)]) 
+
+                of.write("{Yr}, {Mo}, {D}, {H}, {M}, {S}".format( 
+                    Yr=t.year, Mo=t.month, D=t.day, M=t.minute, H=t.hour, S=t.second )
+                )
+
+            of.write("\n") # Finished this message, on to next one
+
+
+
+
+
 # ****** Create the command-line parser ******
 parser = argparse.ArgumentParser(description='Convert JSON tweets to CSV.')
 
@@ -73,7 +147,8 @@ parser.add_argument('-ntc', '--no_time_columns', action="store_true", default=Fa
         help="Don't add the extra time columns to the CSV output")
 
 # Whether to run multi-threaded
-
+parser.add_argument('-nmt', '--no_multi_thread', action="store_true", default=False,
+        help="Don't do the analysis in multiple threads")
 
 # Parse command-line arguments
 args = parser.parse_args()
@@ -103,84 +178,20 @@ print "Will {s} time columns".format(s="not add" if args.no_time_columns else "a
 
 with open(args.outfile, 'w') as of:
 
+    # Prepare the output file
+    for field in fields:
+        of.write(field.replace(",","-") +", ") # (note: no commas in fieldnames)
+    # Also add the extra time columns (added for convenience)
+    if not args.no_time_columns:
+        of.write("Year, Month, Day, Hour, Minute, Second")
+    of.write("\n")
+
     for i, fname in enumerate(args.files):
-        # work out if it is a compressed file or plain text and then open as a file object called
-        # 'f'. (gzip and normal files can be treated the same)
-        with GzipFile(fname, mode="rb") if fname[:-3] == ".gz" else open(fname, "r") as f:
 
-        #f = None
-        #if fname[:-3] == ".gz":
-        #    f = GzipFile(fname, mode="rb")
-        #else
-        # There is no data for this field in this tweet:
-        #    f = open(fname, "r")
+        print "Interrogating file {i}/{num}: {f}".format(i=(i+1), num=len(args.files), f=fname)
+        read_json(fname, of)
 
-            print "Interrogating file {i}/{num}: {f}".format(i=(i+1), num=len(args.files), f=f.name)
-
-            # If this is the first file, prepare the output file
-            if i==0:
-                for field in fields:
-                    of.write(field.replace(",","-") +", ") # (note: no commas in fieldnames)
-                # Also add the extra time columns (added for convenience)
-                if not args.no_time_columns:
-                    of.write("Year, Month, Day, Hour, Minute, Second")
-                of.write("\n")
-
-            for line in f:
-                tweet = json.loads(line) # Create a dictionary from the tweet on the current line
-                
-                # For each field that we're interested in, extract the data and write to the file
-                for field in fields:
-                    nodata = False # Set to true if there is no data for this field
-                    # Need to do a multi-dimensional dictionary lookup from the string field (Sam P
-                    # helped me with this). I.e. convert 's = "user,name,firstname" to 
-                    # tweet["user"]["name"]["firstname"]
-                    value = tweet
-                    #print "\n* FIELD: {f}\n".format(f=field)
-                    for key in field.split(","):
-                        #print "KEY:",key, "\nVALUE",value
-                        if value == None:# or key not in value:
-                            # There is no data for this field in this tweet
-                            #print "No data in tweet for field: {f}".format(f=field)
-                            #print "Value: '{v}'. Key: '{k}'".format(v=value, k=key)
-                            nodata = True
-                            error_count += error_count
-                            if field in error_fields:
-                                error_fields[field] += 1
-                            else:
-                                error_fields[field] = 0
-                            continue # Move onto the next field
-                        try:
-                            value = value[key]
-                        except TypeError: 
-                            # This happens if the key should be an integer. E.g. with coordinates,
-                            # instead of being a dictionary they are a two-element list
-                            value = value[int(key)]
-
-
-                    if nodata:
-                        of.write(" , ") # Nothing to write for this field
-                    else:
-                        of.write(fix(value)+", ")
-
-                if not args.no_time_columns:
-
-                    # Have added all the required fields, now add time columns for convenience.This is
-                    # much more complicated than it should be because the %z symbol in strftime()
-                    # doesn't work on my mac, might work on unix. Instead use email.util library (!)
-
-                    time_str = tweet['created_at']
-                    # Make a tuple from the time (e.g. (year,month,day,hour,minute,second)
-                    time_tpl = email.utils.parsedate_tz(time_str) 
-                    # Now use those indivdual components to make a datetime object
-                    t = dt.datetime(*[time_tpl[i] for i in range(7)]) 
-
-                    of.write("{Yr}, {Mo}, {D}, {H}, {M}, {S}".format( 
-                        Yr=t.year, Mo=t.month, D=t.day, M=t.minute, H=t.hour, S=t.second )
-                    )
-
-                of.write("\n") # Finished this message, on to next one
-
+       
 print "Finished. There were a total of {e} fields that could not be extracted from the"+\
         "json file. These are: ".format(e=error_count)
 pp.pprint(error_fields)
