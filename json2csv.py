@@ -11,6 +11,7 @@ import gzip # For compressing files
 import os
 import json
 import sys
+import multiprocessing as mp # For executing in multiple threads
 
 import pprint # For pretty-printing errors
 pp = pprint.PrettyPrinter(depth=1)
@@ -53,21 +54,22 @@ error_fields = dict()
 error_count = 0
 
 
-def read_json(fname, of):
+def read_json((fname, of)):
     """Reads an input json file, specified by 'fname'. Writes output to an output file ('of') that is
-    open and writeable (e.g. the result of open('out.csv','w') """
+    open and writeable (e.g. the result of open('out.csv','w').
+    If 'of' is None, then the csv text is returned rather than written
+    Argument must be a tuple to work with multiprocessing.Pool """
     
     global error_fields
     global error_count
 
+    csv_str = "" # Store the csv text in memory before writing
+
     # work out if it is a compressed file or plain text and then open as a file object called
     # 'f'. (gzip and normal files can be treated the same)
-    with gzip.GzipFile(fname, mode="rb") if fname[:-3] == ".gz" else open(fname, "r") as f:
-
-        print f
+    with gzip.GzipFile(fname, mode="rb") if fname[-3:] == ".gz" else open(fname, "r") as f:
 
         for line in f:
-            print line
             tweet = json.loads(line) # Create a dictionary from the tweet on the current line
             
             # For each field that we're interested in, extract the data and write to the file
@@ -100,9 +102,11 @@ def read_json(fname, of):
 
 
                 if nodata:
-                    of.write(" , ") # Nothing to write for this field
+                    csv_str += " , "
+                    #of.write(" , ") # Nothing to write for this field
                 else:
-                    of.write(fix(value)+", ")
+                    csv_str += fix(value)+", "
+                    #of.write(fix(value)+", ")
 
             if not args.no_time_columns:
 
@@ -116,11 +120,21 @@ def read_json(fname, of):
                 # Now use those indivdual components to make a datetime object
                 t = dt.datetime(*[time_tpl[i] for i in range(7)]) 
 
-                of.write("{Yr}, {Mo}, {D}, {H}, {M}, {S}".format( 
+                #of.write("{Yr}, {Mo}, {D}, {H}, {M}, {S}".format( 
+                #    Yr=t.year, Mo=t.month, D=t.day, M=t.minute, H=t.hour, S=t.second )
+                #)
+                csv_str += ("{Yr}, {Mo}, {D}, {H}, {M}, {S}".format( 
                     Yr=t.year, Mo=t.month, D=t.day, M=t.minute, H=t.hour, S=t.second )
                 )
+            # Finished this message, on to next one
+            #of.write("\n") 
+            csv_str += "\n"
 
-            of.write("\n") # Finished this message, on to next one
+    # Finished reading, now write output (or just return it)
+    if of == None:
+        return csv_str
+    else:
+        of.write(csv_str)
 
 
 
@@ -186,15 +200,30 @@ with open(args.outfile, 'w') as of:
         of.write("Year, Month, Day, Hour, Minute, Second")
     of.write("\n")
 
-    for i, fname in enumerate(args.files):
+    if args.no_multi_thread: # Run in a single thread
+        for i, fname in enumerate(args.files):
+            print "Interrogating file {i}/{num}: {f}".format(i=(i+1), num=len(args.files), f=fname)
+            read_json((fname, of))
+        print "Finished. There were a total of {e} fields that could not be extracted from the"+\
+                "json file. These are: ".format(e=error_count)
+        pp.pprint(error_fields)
 
-        print "Interrogating file {i}/{num}: {f}".format(i=(i+1), num=len(args.files), f=fname)
-        read_json(fname, of)
+    else:
+        num_cores = mp.cpu_count()
+        print "Running as multiple processes on {cores} cores".format(cores=num_cores)
+        p = mp.Pool(num_cores) # A pool of worker processes
+        # Need to construct a list of tuples to pass as arguments to the read_json function
+        #args = [(f, of) for f in args.files]
+        args = [(f, None) for f in args.files]
+        csv = p.map(read_json, args)
+        # NOTE: at the moment the whole result is stored in memory before being written. Could use
+        # p.map_async and provide a callback function to write results as they come in.
+        for item in csv: # Pool saves the result of each process in a list
+            of.write(item)
+        print "Finished. (Some fields might not have been written, but to see exactly which ones"+\
+            "might not have been written you need to run this with the --no_multi_thread argument)."
 
        
-print "Finished. There were a total of {e} fields that could not be extracted from the"+\
-        "json file. These are: ".format(e=error_count)
-pp.pprint(error_fields)
 
 
 
