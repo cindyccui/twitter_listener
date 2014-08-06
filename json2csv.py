@@ -63,6 +63,10 @@ def read_json((fname, of)):
     global error_fields
     global error_count
 
+    if not os.path.isfile(fname):
+        print "File {f} doesn't look like a file, I wont attempt to read it.".format(f=fname)
+        return ""
+
     csv_str = "" # Store the csv text in memory before writing
 
     # work out if it is a compressed file or plain text and then open as a file object called
