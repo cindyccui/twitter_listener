@@ -15,7 +15,6 @@ consumer_secret=""
 access_token=""
 access_token_secret=""
 
-
 # Global variables
 credentials_file = "./credentials.ini" # Assume in local directory
 TWEETS_PER_FILE = 1000000 # Number of tweets to store before creating a new file
