@@ -8,6 +8,7 @@ import json # For converting string into json object
 import argparse # For parsing command-line arguments
 import time # For adding a timestamp to files
 import gzip # For compressing files
+import traceback # For printing the traceback when errors occur
 
 # add your details
 consumer_key=""
@@ -78,8 +79,14 @@ class FileWriterListener(StreamListener):
 
         # 1 - use json library to create a python dictionary object from the raw data (a 
         # json-formatter string). This can be then be interrogated to find info. about the tweet.
+        try:
+            data = json.loads(raw_data)
+        except ValueError as e:
+            print "****\nCaught a ValueError:",str(e),".\nThe raw_data is:**\n\t",raw_data,"**"
+            print "The trackback is:"
+            print traceback.format_exc()
+            print "****"
 
-        data = json.loads(raw_data)
 
         # 2 - get the id (e.g. data['id'] )
 
