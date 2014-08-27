@@ -5,6 +5,7 @@
 build/
 dist/
 data/
+firehose/
 tweepy.egg-info/
 .env/
 .coverage

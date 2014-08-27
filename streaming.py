@@ -34,13 +34,20 @@ class StdOutListener(StreamListener):
 
 class FileWriterListener(StreamListener):
     """
-    A listener handles tweets are the received from the stream, writing them to a file
+    A listener handles tweets are the received from the stream, writing them to a file.
     """
 
-    def __init__(self):
+    def __init__(self, data_dir="data"):
+        """Optional 'data_dir' argument specifies the data directory to store tweets in. This dir
+        must exist - it is not added automatically because you will probably want to exclude it from
+        the git project."""
+
         self.json_filename = ""  # Name of the file that tweets are being written to
         self.csv_filename = ""   # (will be tXX where XX is the timestamp in seconds)
         self.counter = 0 # Count the number of tweets
+        self.delete_count = 0 # Count the nmber of 'delete' messages received (these aren't tweets)
+
+        self.data_dir=data_dir # The directory to store tweet data in
 
     def on_data(self, raw_data):
 
@@ -49,9 +56,11 @@ class FileWriterListener(StreamListener):
 
             old_filename = self.json_filename
 
-            tm = str(int(time.time() * 1000) ) # Append timestamp to files
-            self.json_filename = "data/t"+tm+".json"
-            self.csv_filename = "data/t"+tm+".csv"
+            ts = str(int(time.time() * 1000) ) # Append timestamp to files
+            #self.json_filename = "data/t"+ts+".json"
+            #self.csv_filename = "data/t"+ts+".csv"
+            self.json_filename = os.path.join(self.data_dir, "t"+ts+".json")
+            self.csv_filename =  os.path.join(self.data_dir, "t"+ts+".csv")
 
             print "Writing to files:", self.json_filename, self.csv_filename
 
@@ -92,13 +101,15 @@ class FileWriterListener(StreamListener):
 
         try:
             tweetid = str(data['id'])
-            print "read tweet",tweetid
+            #print "read tweet",tweetid
             # 3 - write to a file (with filename of tweet id)
             f = open(self.json_filename,'a')
             try:
                 f.write(raw_data) # 
             finally:
                 f.close()
+
+            self.counter += 1 # Increment tweet counter
 
             # 4 - TODO extract ueful info and write to a csv file
 
@@ -107,17 +118,24 @@ class FileWriterListener(StreamListener):
             #    f.write(str(data))
 
         except KeyError as e:
-            print "Caught error receiving tweet: ", str(e) # Show what the error was
-            print "Looks like we have received something that isn't a tweet. Will write it to a different file." 
+            # There is no ID field, so the data probably isn't a tweet. Need to decide what to do
 
-            # Call the file 'error<time>.json'
-            f = open("error"+str(int(time.time() * 1000) )+".json",'w')
-            try:
-                f.write(raw_data) # 
-            finally:
-                f.close()
+            if 'delete' in data: # Looks like a 'delete' message. Ignore it
+                self.delete_count += 1
+                if self.delete_count % TWEETS_PER_FILE == 0:
+                    print "For info: have received {num} delete messages. "+\
+                        "(These have been ignored).".format(num=delete_count)
 
-        self.counter += 1
+            else: # Don't know what's wrong, write the message out to a separate file.
+                print "Caught error receiving tweet: ", str(e) # Show what the error was
+                # Call the file 'error<time>.json'
+                fname = os.path.join(self.data_dir,"error"+str(int(time.time() * 1000) )+".json")
+                print "\tNot sure what the problem is. Will write data to a different file called ",fname 
+                f = open(fname,'w')
+                try:
+                    f.write(raw_data)
+                finally:
+                    f.close()
 
         return True
 
@@ -139,24 +157,45 @@ def check_locations(locs):
         sys.exit(1)
 
 
-if __name__ == '__main__':
-
+def run():
+    """Main munction: parses command-line options and starts the listener""" 
+    global credentials_file
+    
     # Parse command-line options
     parser = argparse.ArgumentParser()
 #    (description='Usage %prog -l <locations> [-c <credentials_file]')
-    parser.add_argument('-l', nargs=4, dest='locs', type=float, required=True, \
+
+    # Can specify a bounding box
+    parser.add_argument('-l', nargs=4, dest='locs', type=float, required=False, default=None, \
             help='specify min/max coordinates of bounding box (minx miny maxx maxy)')
+
+    # The location of the credentials file
     parser.add_argument('-c', nargs=1, dest='cred', type=str, required=False, \
             help='specify location of credentials file', default=credentials_file)
+
+    # Optionally get the sample of tweets from the firehose (not spatial)
+    parser.add_argument('-s', '--sample', dest='sample', action="store_true", default=False,
+        help="Get the 1% sample of tweets from the firehose (a random sample, no filtering)")
+
     args = parser.parse_args()
 
+    # Check the location of the credentials file
     if not os.path.isfile(args.cred):
         print "Error",args.cred,"doesn't look like a file. See the README for details."
         sys.exit(1)
     credentials_file = args.cred
 
-    locations = args.locs
-    check_locations(locations)
+    # Choose a default directory to store messages in
+    if args.locs != None:
+        data_dir = "data"
+    elif args.sample:
+        data_dir = "firehose" 
+    else:
+        print "Error: no locations have been specified, nor has the 'sample' flag been set. So I "+\
+            "don't know whether to filter tweets by location (-l) or just get a random sample from the"+\
+            " firehose (-s)."
+        sys.exit(0)
+
 
     # Read the twitter authentication stuff from the configuration file (see README for details).
     try:
@@ -170,16 +209,33 @@ if __name__ == '__main__':
 
     except:
         print "Error reading credentials from", credentials_file
+        sys.exit(0)
 
-    print "Starting listener on locations:",locations
-
-    #l = StdOutListener()
-    l = FileWriterListener()
     auth = OAuthHandler(consumer_key, consumer_secret)
     auth.set_access_token(access_token, access_token_secret)
 
+    l = FileWriterListener(data_dir=data_dir)
+    stream = Stream(auth, l)
+
     try: 
-        stream = Stream(auth, l)
-        stream.filter(locations=locations)
+
+        if args.sample: # User specified get the random sample of tweets from firehose
+            print "Starting firehose sample listener"
+            if args.locs != None:
+                print "Warning: both sample (-s) and locations (-l) have been specified. "+\
+                        "I'm ignoring the locations and getting tweets from the firehose."
+            stream.sample()
+
+        else: # Assume we must be filtering on locaitons
+            locations = args.locs
+            check_locations(locations)
+            print "Starting listener on locations:",locations
+
+            #l = StdOutListener()
+
+            stream.filter(locations=locations)
     finally:
         stream.disconnect()
+
+if __name__=="__main__":
+    run()
