@@ -9,6 +9,8 @@ import argparse # For parsing command-line arguments
 import time # For adding a timestamp to files
 import gzip # For compressing files
 import traceback # For printing the traceback when errors occur
+from multiprocessing import Process # For compressing files in separate threads
+
 
 # add your details
 consumer_key=""
@@ -18,7 +20,8 @@ access_token_secret=""
 
 # Global variables
 credentials_file = "./credentials.ini" # Assume in local directory
-TWEETS_PER_FILE = 1000000 # Number of tweets to store before creating a new file
+TWEETS_PER_FILE = 500000 # Number of tweets to store before creating a new file
+#TWEETS_PER_FILE = 5000 # Number of tweets to store before creating a new file
 
 class StdOutListener(StreamListener):
     """ A listener handles tweets are the received from the stream.
@@ -49,7 +52,22 @@ class FileWriterListener(StreamListener):
 
         self.data_dir=data_dir # The directory to store tweet data in
 
+    def compress_file(self, old_filename):
+        """Compress the file with all twitter data in using gzip, deleting the original."""
+
+        new_filename = old_filename+".gz" 
+        print "Attempting to compres json file {f} and creating {f2}. (Counter={c})".format(\
+                c=self.counter, f=old_filename, f2=new_filename)
+        with open( old_filename, 'rb') as oldfile, gzip.open(new_filename, 'wb') as zipfile:
+            zipfile.writelines(oldfile)
+            os.remove(old_filename)
+            print "\tFinished compressing file {f}, created file {f2}".format(\
+                    f=oldfile.name,f2=zipfile.name)
+
+
     def on_data(self, raw_data):
+        """Function called when the StreamReader (parent class) receives data from the stream. This
+        function handles writing out the twitter data, compressing large files, etc"""
 
         # See if a new file needs to be created for these tweets
         if self.counter % TWEETS_PER_FILE == 0:
@@ -64,21 +82,12 @@ class FileWriterListener(StreamListener):
 
             print "Writing to files:", self.json_filename, self.csv_filename
 
-            # Compress the old filename (only to json, not csv) (and not when the script starts)
+            # Compress the old filename (only to json, not csv) (and not when the script starts).
+            # This is done in separate thread so as not to stop listenning in the meantime
             if self.counter > 0:
-                print "Compressing json file and creating new one (counter={c})".format(c=self.counter)
-                # ('with' is just a fancy way of openning and closing files)
-                #with open( old_filename, 'rb'), gzip.open(old_filename+".gz", 'wb') as ( old_file, zipfile) :
-                #    zipfile.writelines(oldfile)
-                oldfile = open( old_filename, 'rb')
-                zipfile = gzip.open(old_filename+".gz", 'wb')
-                zipfile.writelines(oldfile)
-                oldfile.close()
-                zipfile.close()
-                os.remove(old_filename)
-
-
-
+                p = Process(target=self.compress_file, args=(old_filename,))
+                p.start()
+                #self.compress_file(old_filename)
 
         # Call the parent (StreamReader) function which does some error checking, returning False if
         # this isn't a tweet.
@@ -123,8 +132,7 @@ class FileWriterListener(StreamListener):
             if 'delete' in data: # Looks like a 'delete' message. Ignore it
                 self.delete_count += 1
                 if self.delete_count % TWEETS_PER_FILE == 0:
-                    print "For info: have received {num} delete messages. "+\
-                        "(These have been ignored).".format(num=delete_count)
+                    print "For info: have received {num} delete messages. (These have been ignored).".format(num=self.delete_count)
 
             else: # Don't know what's wrong, write the message out to a separate file.
                 print "Caught error receiving tweet: ", str(e) # Show what the error was
