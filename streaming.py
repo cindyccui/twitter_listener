@@ -100,11 +100,13 @@ class FileWriterListener(StreamListener):
         try:
             data = json.loads(raw_data)
         except ValueError as e:
-            print "****\nCaught a ValueError:",str(e),".\nThe raw_data is:**\n\t",raw_data,"**"
+            print "****\nCaught a ValueError:",str(e),"Wont try to parse the data."
+            print "The raw_data is:**\n\t",raw_data,"**"
             print "The trackback is:"
             print traceback.format_exc()
             print "****"
-
+            # Can't continue with this invalid data.
+            return False
 
         # 2 - get the id (e.g. data['id'] )
 
@@ -131,7 +133,7 @@ class FileWriterListener(StreamListener):
 
             if 'delete' in data: # Looks like a 'delete' message. Ignore it
                 self.delete_count += 1
-                if self.delete_count % TWEETS_PER_FILE == 0:
+                if self.delete_count % (TWEETS_PER_FILE/100) == 0:
                     print "For info: have received {num} delete messages. (These have been ignored).".format(num=self.delete_count)
 
             else: # Don't know what's wrong, write the message out to a separate file.
