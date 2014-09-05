@@ -106,7 +106,7 @@ class FileWriterListener(StreamListener):
             print traceback.format_exc()
             print "****"
             # Can't continue with this invalid data.
-            return False
+            return True
 
         # 2 - get the id (e.g. data['id'] )
 
