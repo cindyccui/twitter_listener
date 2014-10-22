@@ -12,6 +12,7 @@ import os
 import json
 import sys
 import multiprocessing as mp # For executing in multiple threads
+import traceback
 
 import pprint # For pretty-printing errors
 pp = pprint.PrettyPrinter(depth=1)
@@ -67,14 +68,22 @@ def read_json((fname, of)):
         print "File {f} doesn't look like a file, I wont attempt to read it.".format(f=fname)
         return ""
 
-    csv_str = "" # Store the csv text in memory before writing
+    csv_str = [] # Store the csv text in memory before writing. Use an array because more efficient
 
     # work out if it is a compressed file or plain text and then open as a file object called
     # 'f'. (gzip and normal files can be treated the same)
     with gzip.GzipFile(fname, mode="rb") if fname[-3:] == ".gz" else open(fname, "r") as f:
 
         for line in f:
-            tweet = json.loads(line) # Create a dictionary from the tweet on the current line
+            tweet = None
+            try:
+                tweet = json.loads(line) # Create a dictionary from the tweet on the current line
+            except ValueError as e:
+                print "Warning: there was a problem parsing the json for the line: '{}'".format(\
+                        line)
+                print "That line will be ignored.\nError and stack trace are: {}\n{}".format(\
+                        str(e), traceback.format_exc())
+                continue # Ignore that line
             
             # For each field that we're interested in, extract the data and write to the file
             for field in fields:
@@ -106,10 +115,11 @@ def read_json((fname, of)):
 
 
                 if nodata:
-                    csv_str += " , "
+                    csv_str.append(" , ")
                     #of.write(" , ") # Nothing to write for this field
                 else:
-                    csv_str += fix(value)+", "
+                    csv_str.append(fix(value))
+                    csv_str.append(", ")
                     #of.write(fix(value)+", ")
 
             if not args.no_time_columns:
@@ -127,18 +137,18 @@ def read_json((fname, of)):
                 #of.write("{Yr}, {Mo}, {D}, {H}, {M}, {S}".format( 
                 #    Yr=t.year, Mo=t.month, D=t.day, M=t.minute, H=t.hour, S=t.second )
                 #)
-                csv_str += ("{Yr}, {Mo}, {D}, {H}, {M}, {S}".format( 
+                csv_str.append("{Yr}, {Mo}, {D}, {H}, {M}, {S}".format( 
                     Yr=t.year, Mo=t.month, D=t.day, M=t.minute, H=t.hour, S=t.second )
                 )
             # Finished this message, on to next one
             #of.write("\n") 
-            csv_str += "\n"
+            csv_str.append("\n")
 
     # Finished reading, now write output (or just return it)
     if of == None:
-        return csv_str
+        return ''.join(csv_str)
     else:
-        of.write(csv_str)
+        of.write(''.join(csv_str))
 
 
 
@@ -219,7 +229,7 @@ with open(args.outfile, 'w') as of:
         # Need to construct a list of tuples to pass as arguments to the read_json function
         #args = [(f, of) for f in args.files]
         args = [(f, None) for f in args.files]
-        csv = p.map(read_json, args)
+        csv = p.map(read_json, args) # csv will be a list. Each item is the contents of a json file
         # NOTE: at the moment the whole result is stored in memory before being written. Could use
         # p.map_async and provide a callback function to write results as they come in.
         for item in csv: # Pool saves the result of each process in a list
@@ -227,7 +237,5 @@ with open(args.outfile, 'w') as of:
         print "Finished. (Some fields might not have been written, but to see exactly which ones"+\
             "might not have been written you need to run this with the --no_multi_thread argument)."
 
-       
-
-
+print "Finished writing {}".format(args.outfile)
 
