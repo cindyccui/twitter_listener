@@ -1,0 +1,2 @@
+# Write a new file containing only the lines with 'shottingham' in them. Ignore case
+sed -n '/shottingham/Ip' shottingly.temp.csv > shottingham.csv
