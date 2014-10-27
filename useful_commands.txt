@@ -1,2 +1,9 @@
 # Write a new file containing only the lines with 'shottingham' in them. Ignore case
 sed -n '/shottingham/Ip' shottingly.temp.csv > shottingham.csv
+
+# USE BELOW WHEN MACHINE HAS REBOOTED (or whatever) AND NEED TO RESTART LISTENER.
+# argparse library has been installed into local pythonlibs directory
+# To allow installation of python libraries into a local directory
+app setup canopy
+app setup python-libs
+export PYTHONPATH=$PYTHONPATH:/scratch/pythonlibs/lib/python2.7/site-packages/
