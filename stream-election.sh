@@ -1,0 +1,2 @@
+# Listen for words that might be associated with the election and election policies (for Jess)
+python streaming.py -w Economy Health "Health Care" Immigration immigrants Welfare Benefits Education Housing Defence Foreign defence Pensions EU Europe Environment Tax taxation Transport NHS Referendum Deficit Surplus Minimum wage Budget Left "Left Wing" Right "Right Wing" Liberal Trident Poll Government "Hung parliament" Ballot "Ballot box" Vote Voting Coalition Campaign Election "Election day" "Prime Minister" PM MP Politics Politician Swing "Swing Voter"  

@@ -178,6 +178,10 @@ def run():
     # Can specify a bounding box
     parser.add_argument('-l', nargs=4, dest='locs', type=float, required=False, default=None, \
             help='specify min/max coordinates of bounding box (minx miny maxx maxy)')
+    
+    # Or can search for particular words 
+    parser.add_argument('-w', nargs='+', dest='words', type=str, required=False, default=None, \
+            help='specify word(s) to search the stream for')
 
     # The location of the credentials file
     parser.add_argument('-c', nargs=1, dest='cred', type=str, required=False, \
@@ -195,16 +199,29 @@ def run():
         sys.exit(1)
     credentials_file = args.cred
 
-    # Choose a default directory to store messages in
-    if args.locs != None:
+    # Check that there is something to do!
+    if args.locs == None and args.words == None and args.sample == False:
+        print "Error: no locations (-l) or keywords (-w) have been specified, nor has the"+\
+            "'sample' flag been set (-s). So I don't know what to do!"
+        parser.print_help()
+        sys.exit(0)
+
+    #elif args.locs != None and args.words != None: # Can't search for both locations and words
+    #    print "Error: can't filter tweets using locations (-l) and words (-d) at the same time."
+    #    parser.print_help()
+    #    sys.exit(0)
+
+
+
+
+
+    # Choose a default directory to store messages in ('data' if storing tweets extraxted using
+    # locations or keywords, 'firehose' if listenning to the firehose)
+    data_dir = ""
+    if args.locs != None or args.words != None:
         data_dir = "data"
     elif args.sample:
         data_dir = "firehose" 
-    else:
-        print "Error: no locations have been specified, nor has the 'sample' flag been set. So I "+\
-            "don't know whether to filter tweets by location (-l) or just get a random sample from the"+\
-            " firehose (-s)."
-        sys.exit(0)
 
 
     # Read the twitter authentication stuff from the configuration file (see README for details).
@@ -227,23 +244,36 @@ def run():
     l = FileWriterListener(data_dir=data_dir)
     stream = Stream(auth, l)
 
-    try: 
-
+    try:
+        
         if args.sample: # User specified get the random sample of tweets from firehose
             print "Starting firehose sample listener"
             if args.locs != None:
                 print "Warning: both sample (-s) and locations (-l) have been specified. "+\
                         "I'm ignoring the locations and getting tweets from the firehose."
             stream.sample()
+        
+        else: # We must be listening on keywords and/or locations 
+            print "Starting stream listener"
 
-        else: # Assume we must be filtering on locaitons
-            locations = args.locs
-            check_locations(locations)
-            print "Starting listener on locations:",locations
+            locations = None
+            words = None
+            
+            if args.locs != None:
+                locations = args.locs
+                check_locations(locations)
+                print "\tListening to locations:",locations
 
-            #l = StdOutListener()
+            if args.words != None:
+                print "\tListening for key words:",args.words
+                words = args.words
 
-            stream.filter(locations=locations)
+            
+            l = StdOutListener()
+
+            stream.filter(locations=locations,track=words)
+
+
     finally:
         stream.disconnect()
 
