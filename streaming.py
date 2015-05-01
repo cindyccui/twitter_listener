@@ -248,9 +248,9 @@ def run():
         
         if args.sample: # User specified get the random sample of tweets from firehose
             print "Starting firehose sample listener"
-            if args.locs != None:
-                print "Warning: both sample (-s) and locations (-l) have been specified. "+\
-                        "I'm ignoring the locations and getting tweets from the firehose."
+            if args.locs != None or args.words != None:
+                print "Warning: both sample (-s) and locations (-l) or words (-w) have been specified. "+\
+                        "I'm ignoring the locations/words and getting tweets from the firehose."
             count = 0 # Sometimes get an IncompleteRead exception. Catch this and continue
             while count < 5:
                 try:
