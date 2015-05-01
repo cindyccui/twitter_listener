@@ -251,8 +251,18 @@ def run():
             if args.locs != None:
                 print "Warning: both sample (-s) and locations (-l) have been specified. "+\
                         "I'm ignoring the locations and getting tweets from the firehose."
-            stream.sample()
-        
+            count = 0 # Sometimes get an IncompleteRead exception. Catch this and continue
+            while count < 5:
+                try:
+                    stream.sample()
+                except:
+                    print "****\nReceived an exception listenning to twitter firehose."
+                    print "This is error number: ",(count+1),"will reconnect and continue"
+                    print "The trackback is:"
+                    print traceback.format_exc()
+                    print "****"
+                count += 1
+
         else: # We must be listening on keywords and/or locations 
             print "Starting stream listener"
 
