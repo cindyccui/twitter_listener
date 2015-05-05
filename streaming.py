@@ -229,10 +229,10 @@ def run():
         config = configparser.ConfigParser()
         config.read(credentials_file)
 
-        consumer_key=str(config['CREDENTIALS']['consumer_key'])
-        consumer_secret=str(config['CREDENTIALS']['consumer_secret'])
-        access_token=str(config['CREDENTIALS']['access_token'])
-        access_token_secret=str(config['CREDENTIALS']['access_token_secret'])
+        consumer_key=str(config.get('CREDENTIALS','consumer_key'))
+        consumer_secret=str(config.get('CREDENTIALS','consumer_secret'))
+        access_token=str(config.get('CREDENTIALS','access_token'))
+        access_token_secret=str(config.get('CREDENTIALS','access_token_secret'))
 
     except:
         print "Error reading credentials from", credentials_file
