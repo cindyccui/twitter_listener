@@ -236,6 +236,7 @@ def run():
 
     except:
         print "Error reading credentials from", credentials_file
+        print traceback.format_exc()
         sys.exit(0)
 
     auth = OAuthHandler(consumer_key, consumer_secret)
