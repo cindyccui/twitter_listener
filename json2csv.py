@@ -228,8 +228,8 @@ with open(args.outfile, 'w') as of:
         p = mp.Pool(num_cores) # A pool of worker processes
         # Need to construct a list of tuples to pass as arguments to the read_json function
         #args = [(f, of) for f in args.files]
-        args = [(f, None) for f in args.files]
-        csv = p.map(read_json, args) # csv will be a list. Each item is the contents of a json file
+        files = [(f, None) for f in args.files]
+        csv = p.map(read_json, files) # csv will be a list. Each item is the contents of a json file
         # NOTE: at the moment the whole result is stored in memory before being written. Could use
         # p.map_async and provide a callback function to write results as they come in.
         for item in csv: # Pool saves the result of each process in a list
@@ -237,5 +237,5 @@ with open(args.outfile, 'w') as of:
         print "Finished. (Some fields might not have been written, but to see exactly which ones"+\
             "might not have been written you need to run this with the --no_multi_thread argument)."
 
-print "Finished writing {}".format(args.outfile)
+print "Finished writing {args}".format(args=args.outfile)
 
