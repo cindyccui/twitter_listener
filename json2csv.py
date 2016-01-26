@@ -26,12 +26,20 @@ import email.utils
 
 def fix(text):
     """Encodes a string as unicode and replaces difficult characters. Also checks for and removes
-    things that will break the csv file like newline characters.
+    things that will break the csv file like newline characters, commmas and quotes.
     Also adds quote characters around strings.
     If the given 'text' doesn't have an encode method (e.g. it is a number) then it is just returned
     as a string (using str)."""
     try: 
-        return '"'+text.encode(encoding='UTF-8', errors='xmlcharrefreplace').replace("\n"," ")+'"'
+        # Decode
+        clean = text.encode(encoding='UTF-8', errors='xmlcharrefreplace')
+        # Replace bad characters
+        for ch in [ '"' , ',' , '\n' ]:
+            if ch in clean:
+                clean=clean.replace(ch,"_") # replace with an underscore
+        # Surround strings with quotes
+        clean = '"'+clean+'"'
+        return 
     except AttributeError:
         return str(text)
 
