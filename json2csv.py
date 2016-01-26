@@ -159,9 +159,9 @@ parser = argparse.ArgumentParser(description='Convert JSON tweets to CSV.')
 
 # Filenames
 parser.add_argument('files', nargs="+", metavar="FILE",
-        help="List of input files (at least one must be specified")
+        help="List of input files (at least one must be specified).")
 parser.add_argument('-o', '--outfile', default="tweets.csv",
-        help="Output file name (default tweets.csv")
+        help="Output file name (default tweets.csv).")
 
 # Specify fields to extract
 parser.add_argument('-f', '--field', nargs=1,
