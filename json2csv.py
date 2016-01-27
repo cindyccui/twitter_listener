@@ -39,7 +39,7 @@ def fix(text):
                 clean=clean.replace(ch,"_") # replace with an underscore
         # Surround strings with quotes
         clean = '"'+clean+'"'
-        return 
+        return clean
     except AttributeError:
         return str(text)
 
