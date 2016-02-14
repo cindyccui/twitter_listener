@@ -92,6 +92,8 @@ python streaming.py -l -10 50 2 60
 
 (the above defines a bounding box approximately around the UK).
 
+There are some examples already prepared, e.g. ```stream-firehose.sh``` listens to the random sample and ```stream-ox.sh``` listens for tweets in and around Oxford.
+
 
 ## The Output Data
 
