@@ -38,7 +38,7 @@ and if that doesn't work, try:
 sudo easy_install configparser
 ```
 
-If neither of those work, you need to install the [setuptools](https://pypi.python.org/pypi/setuptools) package manager first (although I'm surprised that it didn't come with your Python distribution.
+If neither of those work, you need to install the [setuptools](https://pypi.python.org/pypi/setuptools) package manager first (although I'm surprised that it didn't come with your Python distribution).
 
 I'm not sure how to install Python libraries on Windows. It looks like [pip-Win](https://pypi.python.org/pypi/pip-Win/1.4) is what you need.
 
@@ -52,13 +52,9 @@ If you get the following error:
 ```Error ./credentials.ini doesn't look like a file. See the README for details. ``` 
 then Python is working fine.
 
-## Twitter API Key
+### Twitter API Key
 
-Before you can access the Twitter API, you need a key. The details from the key need to be stored in a file called ```credentials.ini'''.
-
-
-
-
+Before you can access the Twitter API, you need a key (aka. 'Token'). This tells Twitter who is trying to acccess their API. The details from the key need to be stored in a file called ```credentials.ini``` that contains the following:
 
 ```{}
 consumer_key=""
@@ -67,51 +63,58 @@ access_token=""
 access_token_secret=""
 ```
 
-All four codes must be entered correctly between the quotation "" symbols.
-Then the rest of the `streaming.py` file can be altered for your needs
-A basic example is provided [here](https://github.com/Robinlovelace/tweepy/blob/master/streaming-leeds.py),
-which contains the following line of code to filter the tweets by geographical
-location:
+All four codes must be entered between the quotation "" symbols. To get these keys, follow the instructions below. You need to set up an 'application' on Twitter and then generate access tokens. 
+
+[https://dev.twitter.com/oauth/overview/application-owner-access-tokens](https://dev.twitter.com/oauth/overview/application-owner-access-tokens)
+
+Once you have those tokens, create your new ```credentials.ini``` file put the store the tokens using the format above. 
+
+
+## Running the Program
+
+You're now ready to run the program. The file ```streaming.py``` does most of the work. To see what options are avialable, type:
 
 ```{}
-    stream.filter(locations=[-2.17,53.52,-1.20,53.96])
+python streaming.py
 ```
 
-This instructs the program to only stream those tweets with are
-within the bounding box, which set as the extent of West Yorksire,
-in lat/long coordinates. If the file is saved in the working directory
-of a Linux terminal, it can be run simply by typing the following:
+The two most common uses are to listen to all tweets from the [public sample](https://dev.twitter.com/streaming/reference/get/statuses/sample) by using the ```-s``` flag:
 
-```{python}
-python streaming-leeds.py
+```{}
+python streaming.py -s
 ```
 
-To see this in action, take a look at the stream of Tweets illustrated
-in [this video](http://youtu.be/fqrVFReL7dY).
+Or to listen to all tweets that come from a particular location using the ```-l``` flag entering the lat/loncoordinates of a bounding box to search in:
 
-<iframe width="420" height="315" src="//www.youtube.com/embed/fqrVFReL7dY" frameborder="0" allowfullscreen></iframe>
-
-Not that in the first stream, a mass of unreadable information was provided directly:
-this is the '[firehose]', the raw mass of data eminating from Twitter.
-The second stream used the following line of code to extract only the user name
-and the text for each tweet (see
-[here](http://runnable.com/Us9rrMiTWf9bAAW3/how-to-stream-data-from-twitter-with-tweepy-for-python) for the complete script):
-
-```{python}
-print '@%s: %s' % (decoded['user']['screen_name'], decoded['text'].encode('ascii', 'ignore'))
+```{}
+python streaming.py -l -10 50 2 60
 ```
 
-Now, saving this stream of information from the terminal output is quite simple
-in Linux: just type `bash | tee /path/to/logfile` before running the streaming
-command and all output will be sent to the logfile in text format.
-Remember to type `exit` again in the terminal when you have finished streaming
-and the data will be saved. After that, the challenge is to extract useful
-information from that mass of raw data.
+(the above defines a bounding box approximately around the UK).
 
-## Extracting the data into other formats
 
-## Doing it in Java
+## The Output Data
 
-## Other options
+The program writes all of the tweets that it receives to a file in the ```data``` directory called something like: ```t1452591943781.json``` ( the numbers are the [Unix epoch time](http://www.epochconverter.com/) when the program was started). In the file, each tweeet is written as a [JSON](http://www.json.org/) object (one per line). Once there are a certain number of tweets in the file (500,000 by default) it uses gzip to compress that file and starts a new one.
 
-To install the python-twitter plugin ( http://code.google.com/p/python-twitter/ )
+I've written a handy script to convert the files from JSON format into CSV. It's called ```json2csv.py```.
+
+If you start it with the ```-h``` parameter it will tell you about the different options:
+
+```{}
+python json2csv.py -h
+```
+
+Basic useage is to pass in a directory that contains a load of ```.json``` and ```.json.gz``` files and tell it where to create a new csv file. E.g.:
+
+```{}
+python json2csv.py -o tweets.csv data/
+```
+
+You can specif exactly what attributes you want to extract if you want more/less than the defaults. E.g. to just get user ID and the message (and nothing else) you would do:
+
+```{}
+python json2csv.py -nd -f 'user,id' -f 'text' -o tweets.csv  data/
+```
+
+The other useful option is ```-nmt```. That runs the script in single-thread mode which will take a lot longer but gives you more useful output. 

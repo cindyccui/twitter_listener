@@ -189,7 +189,7 @@ def run():
 
     # Optionally get the sample of tweets from the firehose (not spatial)
     parser.add_argument('-s', '--sample', dest='sample', action="store_true", default=False,
-        help="Get the 1% sample of tweets from the firehose (a random sample, no filtering)")
+        help="Get the 1 percent sample of tweets from the firehose (a random sample, no filtering)")
 
     args = parser.parse_args()
 
