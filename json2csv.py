@@ -44,16 +44,16 @@ def fix(text):
         return str(text)
 
 
-def check_bb(bounding_box):
+def check_bb(bb):
     """Checks that the locations input from the command line look OK. Exit if not."""
     # argparse will have turned the arguments into a 4-item list
-    if locs[0] > locs[2]:
-        print "Error with locations ({locs}), min x ({minx}) is greater than max x ({maxx})".format( \
-                locs=locs, minx=locs[0], maxx=locs[2])
+    if bb[0] > bb[2]:
+        print "Error with locations ({bb}), min x ({minx}) is greater than max x ({maxx})".format( \
+                bb=bb, minx=bb[0], maxx=bb[2])
         sys.exit(1)
-    if locs[1] > locs[3]:
-        print "Error with locations ({locs}), min y ({miny}) is greater than max y ({maxy})".format( \
-                locs=locs, miny=locs[1], maxy=locs[3])
+    if bb[1] > bb[3]:
+        print "Error with locations ({bb}), min y ({miny}) is greater than max y ({maxy})".format( \
+                bb=bb, miny=bb[1], maxy=bb[3])
         sys.exit(1)
 
 
@@ -96,6 +96,8 @@ def read_json((fname, of)):
 
         for line in f:
             tweet = None
+            # Construct a line for the csv file from the tweet (array for efficiency)
+            csvline = []
             try:
                 tweet = json.loads(line) # Create a dictionary from the tweet on the current line
             except ValueError as e:
@@ -103,7 +105,11 @@ def read_json((fname, of)):
                         line)
                 print "That line will be ignored.\nError and stack trace are: {}\n{}".format(\
                         str(e), traceback.format_exc())
-                continue # Ignore that line
+                continue # Ignore that line           
+            
+            # We might need to remember the coordinates of this tweet
+            xcor = None
+            ycor = None
             
             # For each field that we're interested in, extract the data and write to the file
             for field in fields:
@@ -112,13 +118,9 @@ def read_json((fname, of)):
                 # helped me with this). I.e. convert 's = "user,name,firstname" to 
                 # tweet["user"]["name"]["firstname"]
                 value = tweet
-                #print "\n* FIELD: {f}\n".format(f=field)
                 for key in field.split(","):
-                    #print "KEY:",key, "\nVALUE",value
-                    if value == None:# or key not in value:
+                    if value == None:
                         # There is no data for this field in this tweet
-                        #print "No data in tweet for field: {f}".format(f=field)
-                        #print "Value: '{v}'. Key: '{k}'".format(v=value, k=key)
                         nodata = True
                         error_count += error_count
                         if field in error_fields:
@@ -132,15 +134,20 @@ def read_json((fname, of)):
                         # This happens if the key should be an integer. E.g. with coordinates,
                         # instead of being a dictionary they are a two-element list
                         value = value[int(key)]
-
+                
+                # Might need to remember the x and y coordinates
+                if args.bounding_box != None:
+                    if field == "geo,coordinates,0": # (latitude, y)
+                        ycor = value
+                    elif field == "geo,coordinates,1": # (longitude, x)
+                        xcor = value                
 
                 if nodata:
-                    csv_str.append(" , ")
-                    #of.write(" , ") # Nothing to write for this field
+                    csvline.append(" , ")
                 else:
-                    csv_str.append(fix(value))
-                    csv_str.append(", ")
-                    #of.write(fix(value)+", ")
+                    csvline.append(fix(value))
+                    csvline.append(", ")
+                
 
             if not args.no_time_columns:
 
@@ -157,16 +164,27 @@ def read_json((fname, of)):
                 #of.write("{Yr}, {Mo}, {D}, {H}, {M}, {S}".format( 
                 #    Yr=t.year, Mo=t.month, D=t.day, M=t.minute, H=t.hour, S=t.second )
                 #)
-                csv_str.append("{Yr}, {Mo}, {D}, {H}, {M}, {S}".format( 
+                csvline.append("{Yr}, {Mo}, {D}, {H}, {M}, {S}".format( 
                     Yr=t.year, Mo=t.month, D=t.day, M=t.minute, H=t.hour, S=t.second )
                 )
-            
-            XXXX HERE - CHECK THE BOUNDING BOX IF APPLICABLE
-            
-            # Finished this message, on to next one
-            #of.write("\n") 
-            csv_str.append("\n")
 
+            
+            # Finished converting this tweet into a csv string.
+            # Check that it is within the bounding box (if applicable). 
+            # E.g. bounding box for leeds is 4-element array like this: -2.17 53.52 -1.20 53.9
+            if args.bounding_box != None:
+                bb = args.bounding_box # (to save typing)
+                if not ( xcor >= bb[0] and xcor <= bb[2] and ycor >= bb[1] and ycor <= bb[3] ):
+                    continue # Tweet isn't within the bounding box, just continue
+
+            
+            #Write the line to the main output and move on to next one
+            csvline.append("\n")
+            csv_str.append(''.join(csvline))
+
+    #    print csvline
+    #    print csv_str
+    
     # Finished reading, now write output (or just return it)
     if of == None:
         return ''.join(csv_str)
@@ -178,7 +196,18 @@ def read_json((fname, of)):
 
 
 # ****** Create the command-line parser ******
-parser = argparse.ArgumentParser(description='Convert JSON tweets to CSV.')
+desc = """Convert JSON tweets to CSV.
+EXAMPLES OF USE:
+1. Simple convert with all the defauls, assuming the .json files are gz compressed
+   and stored in the 'data' directory:
+   python json2csv.py data/*.json.gz
+2. As above, but not running in multi-thread mode (good for debugging)
+   python json2csv.py -nmt data/*.json.gz
+3. Write to a file called 'leeds.csv' and only return tweets within the Leeds bouding box:
+   python json2csv.py -o leeds.csv -bb -2.17 53.52 -1.20 53.9 data/*.json.gz
+"""
+
+parser = argparse.ArgumentParser(description=desc)
 
 # Filenames
 parser.add_argument('files', nargs="+", metavar="FILE",
@@ -255,8 +284,7 @@ with open(args.outfile, 'w') as of:
         for i, fname in enumerate(args.files):
             print "Interrogating file {i}/{num}: {f}".format(i=(i+1), num=len(args.files), f=fname)
             read_json((fname, of))
-        print "Finished. There were a total of {e} fields that could not be extracted from the"+\
-                "json file. These are: ".format(e=error_count)
+        print "Finished. There were a total of {} fields that could not be extracted from the json file. These are: ".format(error_count)
         pp.pprint(error_fields)
 
     else:
