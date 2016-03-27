@@ -44,6 +44,18 @@ def fix(text):
         return str(text)
 
 
+def check_bb(bounding_box):
+    """Checks that the locations input from the command line look OK. Exit if not."""
+    # argparse will have turned the arguments into a 4-item list
+    if locs[0] > locs[2]:
+        print "Error with locations ({locs}), min x ({minx}) is greater than max x ({maxx})".format( \
+                locs=locs, minx=locs[0], maxx=locs[2])
+        sys.exit(1)
+    if locs[1] > locs[3]:
+        print "Error with locations ({locs}), min y ({miny}) is greater than max y ({maxy})".format( \
+                locs=locs, miny=locs[1], maxy=locs[3])
+        sys.exit(1)
+
 
 # A list to store the fields to retrieve from the json files. Start with some commonly used fields.
 # Each dimension needs to be separated with commas
@@ -148,6 +160,9 @@ def read_json((fname, of)):
                 csv_str.append("{Yr}, {Mo}, {D}, {H}, {M}, {S}".format( 
                     Yr=t.year, Mo=t.month, D=t.day, M=t.minute, H=t.hour, S=t.second )
                 )
+            
+            XXXX HERE - CHECK THE BOUNDING BOX IF APPLICABLE
+            
             # Finished this message, on to next one
             #of.write("\n") 
             csv_str.append("\n")
@@ -186,6 +201,13 @@ parser.add_argument('-ntc', '--no_time_columns', action="store_true", default=Fa
 parser.add_argument('-nmt', '--no_multi_thread', action="store_true", default=False,
         help="Don't do the analysis in multiple threads")
 
+# Can include a bounding box and only include tweets within the box
+parser.add_argument('-bb', '--bounding_box', nargs=4, dest='bounding_box', type=float, required=False, default=None, \
+    help='specify min/max coordinates of bounding box (minx miny maxx maxy) and\n'+\
+             'only return tweets that have coordinates within this box.\n'+\
+             'Note: tweets without GPS coordinates will be ignored.')
+
+
 # Parse command-line arguments
 args = parser.parse_args()
 
@@ -202,11 +224,18 @@ if len(fields)==0:
             "If you want to add fields yourself use --field"
     sys.exit(1)
 
+# Check the bounding box. If no good then the script will exit
+if args.bounding_box != None:
+    check_bb(args.bounding_box)
+
 print "Will write output to: ",args.outfile
 
 print "Will extract data in the following json fields: ",fields
 
 print "Will {s} time columns".format(s="not add" if args.no_time_columns else "add")
+
+if args.bounding_box != None:
+    print "Will only return tweets withing the bounding box {}.".format(str(args.bounding_box))
 
 
 
