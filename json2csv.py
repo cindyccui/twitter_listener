@@ -7,6 +7,7 @@
 # Note: for convenience some time columns are also added: Year, Month, Day, Hour, Minute, Seconds
 
 import argparse # For parsing command line arguments
+from argparse import RawTextHelpFormatter # For making nicely formatted help text
 import gzip # For compressing files
 import os
 import json
@@ -197,17 +198,20 @@ def read_json((fname, of)):
 
 # ****** Create the command-line parser ******
 desc = """Convert JSON tweets to CSV.
-EXAMPLES OF USE:
+EXAMPLES OF USE:\n
 1. Simple convert with all the defauls, assuming the .json files are gz compressed
    and stored in the 'data' directory:
-   python json2csv.py data/*.json.gz
+   $python json2csv.py data/*.json.gz\n
 2. As above, but not running in multi-thread mode (good for debugging)
-   python json2csv.py -nmt data/*.json.gz
-3. Write to a file called 'leeds.csv' and only return tweets within the Leeds bouding box:
+   $python json2csv.py -nmt data/*.json.gz\n
+3. This time, don't include any of the default fields. Instead, specify exactly which fields
+   should be extracted from the json: the creation time, id, text, user id, and GPS coordinates
+   $python json2csv.py -nd -f created_at -f id -f text -f user,id -f geo,coordinates,0 -f geo,coordinates,1 data/*.json.gz\n
+4. Write to a file called 'leeds.csv' and only return tweets within the Leeds bouding box:
    python json2csv.py -o leeds.csv -bb -2.17 53.52 -1.20 53.9 data/*.json.gz
 """
 
-parser = argparse.ArgumentParser(description=desc)
+parser = argparse.ArgumentParser(description=desc, formatter_class=RawTextHelpFormatter)
 
 # Filenames
 parser.add_argument('files', nargs="+", metavar="FILE",
@@ -216,9 +220,10 @@ parser.add_argument('-o', '--outfile', default="tweets.csv",
         help="Output file name (default tweets.csv).")
 
 # Specify fields to extract
-parser.add_argument('-f', '--field', nargs=1,
-        help="Add a field to the output, with each dimension separated by commas. \
-                E.g. to get the ID of the user who posted the message, use 'user,id'.")
+parser.add_argument('-f', '--field', action='append',
+        help="""Add a field to the output, with each dimension separated by commas.
+E.g. to get the ID of the user who posted the message, use 'user,id'.
+""")
 
 # Whether or not to clear all the defaults or add time columns
 parser.add_argument('-nd', '--no_defaults', action="store_true", default=False,
@@ -242,9 +247,14 @@ args = parser.parse_args()
 
 if args.no_defaults:
     print "-nd specified: not extracting the default fields"
-    fields = {}
+    fields = []
 
-# XXXX add any specified columns to the fields that we're interested in
+# Add any specified columns to the fields that we're interested in (if any)
+
+if args.field:
+    for fld in args.field:
+        fields.append(fld)
+
 
 if len(fields)==0:
     print "No fields have been specified, you have probably set the '--no_defaults' flag "+\
