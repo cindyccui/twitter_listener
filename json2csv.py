@@ -66,6 +66,8 @@ fields = [
         "user,screen_name",     # Name of the user
         "geo,coordinates,0",    # Latitude (y)
         "geo,coordinates,1",    # Longitude (x)
+        "coordinates,coordinates,0", # Longitude (x) using 'coordinates' rather than 'geo' field 
+        "coordinates,coordinates,1", # Latitude (y) 
         "place,full_name",      # Name of the location
         "created_at",           # Time created
         "text"                  # Message text
@@ -123,7 +125,7 @@ def read_json((fname, of)):
                     if value == None:
                         # There is no data for this field in this tweet
                         nodata = True
-                        error_count += error_count
+                        error_count += 1
                         if field in error_fields:
                             error_fields[field] += 1
                         else:
@@ -138,10 +140,15 @@ def read_json((fname, of)):
                 
                 # Might need to remember the x and y coordinates
                 if args.bounding_box != None:
-                    if field == "geo,coordinates,0": # (latitude, y)
+                    if field == "coordinates,coordinates,1": # (latitude, y)
                         ycor = value
-                    elif field == "geo,coordinates,1": # (longitude, x)
-                        xcor = value                
+                    elif field == "coordinates,coordinates,0": # (longitude, x)
+                        xcor = value   
+                    # Used to use 'geo' field to get coordinates
+                    #if field == "geo,coordinates,0": # (latitude, y)
+                    #    ycor = value
+                    #elif field == "geo,coordinates,1": # (longitude, x)
+                    #    xcor = value                
 
                 if nodata:
                     csvline.append(" , ")
