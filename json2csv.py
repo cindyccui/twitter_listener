@@ -14,7 +14,7 @@ import json
 import sys
 import multiprocessing as mp # For executing in multiple threads
 import traceback
-
+import io
 import pprint # For pretty-printing errors
 pp = pprint.PrettyPrinter(depth=1)
 
@@ -33,7 +33,8 @@ def fix(text):
     as a string (using str)."""
     try: 
         # Decode
-        clean = text.encode(encoding='UTF-8', errors='xmlcharrefreplace')
+        #  clean = text.encode(encoding='UTF-8', errors='xmlcharrefreplace') # (compatible with py2.7 only)
+        clean = text.encode('UTF-8', 'xmlcharrefreplace')
         # Replace bad characters
         for ch in [ '"' , ',' , '\n' ]:
             if ch in clean:
@@ -81,21 +82,36 @@ error_count = 0
 def read_json((fname, of)):
     """Reads an input json file, specified by 'fname'. Writes output to an output file ('of') that is
     open and writeable (e.g. the result of open('out.csv','w').
+    fname can also be a BytesIO instance.
     If 'of' is None, then the csv text is returned rather than written
     Argument must be a tuple to work with multiprocessing.Pool """
     
     global error_fields
     global error_count
 
-    if not os.path.isfile(fname):
+    # Check that fname is either a file or a BytesIO instance (do BytesIO first, otherwise
+    # os.path.isfile throws an error (it doesn't like to take BytesIO objects!)
+    if not (isinstance(fname, io.BytesIO) or os.path.isfile(fname)) :
         print "File {f} doesn't look like a file, I wont attempt to read it.".format(f=fname)
         return ""
 
     csv_str = [] # Store the csv text in memory before writing. Use an array because more efficient
 
+    # Work out what type of thing we're dealing with. It could either be a GzipFile, a normal file,
+    # or a BytesIO stream. Whatever it is, it needs to be passed to the 'with' below
+    def open_f():
+        if isinstance(fname, io.BytesIO):
+            return fname # If it's already a stream just return it, no need to open
+        elif fname[-3:] == ".gz":
+            return gzip.GzipFile(fname, mode="rb")
+        else:
+            return open(fname, "r")
+
     # work out if it is a compressed file or plain text and then open as a file object called
     # 'f'. (gzip and normal files can be treated the same)
-    with gzip.GzipFile(fname, mode="rb") if fname[-3:] == ".gz" else open(fname, "r") as f:
+    #with gzip.GzipFile(fname, mode="rb") if fname[-3:] == ".gz" else open(fname, "r") as f:
+
+    with open_f() as f:
 
         for line in f:
             tweet = None
@@ -109,6 +125,11 @@ def read_json((fname, of)):
                 print "That line will be ignored.\nError and stack trace are: {}\n{}".format(\
                         str(e), traceback.format_exc())
                 continue # Ignore that line           
+
+            # See if it is a 'delete' message (not a real tweet)
+            if tweet.keys() == ["delete"]:
+                #print "Have received a 'delete' message, ignoring"
+                continue
             
             # We might need to remember the coordinates of this tweet
             xcor = None
@@ -200,57 +221,62 @@ def read_json((fname, of)):
         of.write(''.join(csv_str))
 
 
+
+
+# ****** Create the command-line parser ******
+desc = """Convert JSON tweets to CSV.
+EXAMPLES OF USE:\n
+1. Simple convert with all the defauls, assuming the .json files are gz compressed
+and stored in the 'data' directory:
+$python json2csv.py data/*.json.gz\n
+2. As above, but not running in multi-thread mode (good for debugging)
+$python json2csv.py -nmt data/*.json.gz\n
+3. This time, don't include any of the default fields. Instead, specify exactly which fields
+should be extracted from the json: the creation time, id, text, user id, and GPS coordinates
+$python json2csv.py -nd -f created_at -f id -f text -f user,id -f geo,coordinates,0 -f geo,coordinates,1 data/*.json.gz\n
+4. Write to a file called 'leeds.csv' and only return tweets within the Leeds bouding box:
+python json2csv.py -o leeds.csv -bb -2.17 53.52 -1.20 53.9 data/*.json.gz
+"""
+
+parser = argparse.ArgumentParser(description=desc, formatter_class=RawTextHelpFormatter)
+
+# Filenames
+parser.add_argument('files', nargs="+", metavar="FILE",
+        help="List of input files (at least one must be specified).")
+parser.add_argument('-o', '--outfile', default="tweets.csv",
+        help="Output file name (default tweets.csv).")
+
+# Specify fields to extract
+parser.add_argument('-f', '--field', action='append',
+        help="""Add a field to the output, with each dimension separated by commas.
+E.g. to get the ID of the user who posted the message, use 'user,id'.
+""")
+
+# Whether or not to clear all the defaults or add time columns
+parser.add_argument('-nd', '--no_defaults', action="store_true", default=False,
+        help="Don't add any of the default fields to the CSV output")
+parser.add_argument('-ntc', '--no_time_columns', action="store_true", default=False,
+        help="Don't add the extra time columns to the CSV output")
+
+# Whether to run multi-threaded
+parser.add_argument('-nmt', '--no_multi_thread', action="store_true", default=False,
+        help="Don't do the analysis in multiple threads")
+
+# Can include a bounding box and only include tweets within the box
+parser.add_argument('-bb', '--bounding_box', nargs=4, dest='bounding_box', type=float, required=False, default=None, \
+    help='specify min/max coordinates of bounding box (minx miny maxx maxy) and\n'+\
+            'only return tweets that have coordinates within this box.\n'+\
+            'Note: tweets without GPS coordinates will be ignored.')
+
+
+# Parse command-line arguments
+args = parser.parse_args()
+
+# At this point, don't do anything else unless, this script is being called directly. If it is being
+# called from elsewhere we don't want to try to parse the command-line - there wont be anything
+# there.
+
 if __name__=="__main__":
-
-
-    # ****** Create the command-line parser ******
-    desc = """Convert JSON tweets to CSV.
-    EXAMPLES OF USE:\n
-    1. Simple convert with all the defauls, assuming the .json files are gz compressed
-    and stored in the 'data' directory:
-    $python json2csv.py data/*.json.gz\n
-    2. As above, but not running in multi-thread mode (good for debugging)
-    $python json2csv.py -nmt data/*.json.gz\n
-    3. This time, don't include any of the default fields. Instead, specify exactly which fields
-    should be extracted from the json: the creation time, id, text, user id, and GPS coordinates
-    $python json2csv.py -nd -f created_at -f id -f text -f user,id -f geo,coordinates,0 -f geo,coordinates,1 data/*.json.gz\n
-    4. Write to a file called 'leeds.csv' and only return tweets within the Leeds bouding box:
-    python json2csv.py -o leeds.csv -bb -2.17 53.52 -1.20 53.9 data/*.json.gz
-    """
-
-    parser = argparse.ArgumentParser(description=desc, formatter_class=RawTextHelpFormatter)
-
-    # Filenames
-    parser.add_argument('files', nargs="+", metavar="FILE",
-            help="List of input files (at least one must be specified).")
-    parser.add_argument('-o', '--outfile', default="tweets.csv",
-            help="Output file name (default tweets.csv).")
-
-    # Specify fields to extract
-    parser.add_argument('-f', '--field', action='append',
-            help="""Add a field to the output, with each dimension separated by commas.
-    E.g. to get the ID of the user who posted the message, use 'user,id'.
-    """)
-
-    # Whether or not to clear all the defaults or add time columns
-    parser.add_argument('-nd', '--no_defaults', action="store_true", default=False,
-            help="Don't add any of the default fields to the CSV output")
-    parser.add_argument('-ntc', '--no_time_columns', action="store_true", default=False,
-            help="Don't add the extra time columns to the CSV output")
-
-    # Whether to run multi-threaded
-    parser.add_argument('-nmt', '--no_multi_thread', action="store_true", default=False,
-            help="Don't do the analysis in multiple threads")
-
-    # Can include a bounding box and only include tweets within the box
-    parser.add_argument('-bb', '--bounding_box', nargs=4, dest='bounding_box', type=float, required=False, default=None, \
-        help='specify min/max coordinates of bounding box (minx miny maxx maxy) and\n'+\
-                'only return tweets that have coordinates within this box.\n'+\
-                'Note: tweets without GPS coordinates will be ignored.')
-
-
-    # Parse command-line arguments
-    args = parser.parse_args()
 
     if args.no_defaults:
         print "-nd specified: not extracting the default fields"
