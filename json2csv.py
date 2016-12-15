@@ -200,124 +200,124 @@ def read_json((fname, of)):
         of.write(''.join(csv_str))
 
 
+if __name__=="__main__":
+
+
+    # ****** Create the command-line parser ******
+    desc = """Convert JSON tweets to CSV.
+    EXAMPLES OF USE:\n
+    1. Simple convert with all the defauls, assuming the .json files are gz compressed
+    and stored in the 'data' directory:
+    $python json2csv.py data/*.json.gz\n
+    2. As above, but not running in multi-thread mode (good for debugging)
+    $python json2csv.py -nmt data/*.json.gz\n
+    3. This time, don't include any of the default fields. Instead, specify exactly which fields
+    should be extracted from the json: the creation time, id, text, user id, and GPS coordinates
+    $python json2csv.py -nd -f created_at -f id -f text -f user,id -f geo,coordinates,0 -f geo,coordinates,1 data/*.json.gz\n
+    4. Write to a file called 'leeds.csv' and only return tweets within the Leeds bouding box:
+    python json2csv.py -o leeds.csv -bb -2.17 53.52 -1.20 53.9 data/*.json.gz
+    """
+
+    parser = argparse.ArgumentParser(description=desc, formatter_class=RawTextHelpFormatter)
+
+    # Filenames
+    parser.add_argument('files', nargs="+", metavar="FILE",
+            help="List of input files (at least one must be specified).")
+    parser.add_argument('-o', '--outfile', default="tweets.csv",
+            help="Output file name (default tweets.csv).")
+
+    # Specify fields to extract
+    parser.add_argument('-f', '--field', action='append',
+            help="""Add a field to the output, with each dimension separated by commas.
+    E.g. to get the ID of the user who posted the message, use 'user,id'.
+    """)
+
+    # Whether or not to clear all the defaults or add time columns
+    parser.add_argument('-nd', '--no_defaults', action="store_true", default=False,
+            help="Don't add any of the default fields to the CSV output")
+    parser.add_argument('-ntc', '--no_time_columns', action="store_true", default=False,
+            help="Don't add the extra time columns to the CSV output")
+
+    # Whether to run multi-threaded
+    parser.add_argument('-nmt', '--no_multi_thread', action="store_true", default=False,
+            help="Don't do the analysis in multiple threads")
+
+    # Can include a bounding box and only include tweets within the box
+    parser.add_argument('-bb', '--bounding_box', nargs=4, dest='bounding_box', type=float, required=False, default=None, \
+        help='specify min/max coordinates of bounding box (minx miny maxx maxy) and\n'+\
+                'only return tweets that have coordinates within this box.\n'+\
+                'Note: tweets without GPS coordinates will be ignored.')
+
+
+    # Parse command-line arguments
+    args = parser.parse_args()
+
+    if args.no_defaults:
+        print "-nd specified: not extracting the default fields"
+        fields = []
+
+    # Add any specified columns to the fields that we're interested in (if any)
+
+    if args.field:
+        for fld in args.field:
+            fields.append(fld)
+
+
+    if len(fields)==0:
+        print "No fields have been specified, you have probably set the '--no_defaults' flag "+\
+                "but not specified any of your own fields.\n"+\
+                "This is probably a mistake so I wont continue.\n"+\
+                "If you want to add fields yourself use --field"
+        sys.exit(1)
+
+    # Check the bounding box. If no good then the script will exit
+    if args.bounding_box != None:
+        check_bb(args.bounding_box)
+
+    print "Will write output to: ",args.outfile
+
+    print "Will extract data in the following json fields: ",fields
+
+    print "Will {s} time columns".format(s="not add" if args.no_time_columns else "add")
+
+    if args.bounding_box != None:
+        print "Will only return tweets withing the bounding box {}.".format(str(args.bounding_box))
 
 
 
-# ****** Create the command-line parser ******
-desc = """Convert JSON tweets to CSV.
-EXAMPLES OF USE:\n
-1. Simple convert with all the defauls, assuming the .json files are gz compressed
-   and stored in the 'data' directory:
-   $python json2csv.py data/*.json.gz\n
-2. As above, but not running in multi-thread mode (good for debugging)
-   $python json2csv.py -nmt data/*.json.gz\n
-3. This time, don't include any of the default fields. Instead, specify exactly which fields
-   should be extracted from the json: the creation time, id, text, user id, and GPS coordinates
-   $python json2csv.py -nd -f created_at -f id -f text -f user,id -f geo,coordinates,0 -f geo,coordinates,1 data/*.json.gz\n
-4. Write to a file called 'leeds.csv' and only return tweets within the Leeds bouding box:
-   python json2csv.py -o leeds.csv -bb -2.17 53.52 -1.20 53.9 data/*.json.gz
-"""
+    # ****** Start interrogating the tweet files (one tweet per line, possibly compressed) ******
 
-parser = argparse.ArgumentParser(description=desc, formatter_class=RawTextHelpFormatter)
+    with open(args.outfile, 'w') as of:
 
-# Filenames
-parser.add_argument('files', nargs="+", metavar="FILE",
-        help="List of input files (at least one must be specified).")
-parser.add_argument('-o', '--outfile', default="tweets.csv",
-        help="Output file name (default tweets.csv).")
+        # Prepare the output file
+        for field in fields:
+            of.write(field.replace(",","-") +", ") # (note: no commas in fieldnames)
+        # Also add the extra time columns (added for convenience)
+        if not args.no_time_columns:
+            of.write("Year, Month, Day, Hour, Minute, Second")
+        of.write("\n")
 
-# Specify fields to extract
-parser.add_argument('-f', '--field', action='append',
-        help="""Add a field to the output, with each dimension separated by commas.
-E.g. to get the ID of the user who posted the message, use 'user,id'.
-""")
+        if args.no_multi_thread: # Run in a single thread
+            for i, fname in enumerate(args.files):
+                print "Interrogating file {i}/{num}: {f}".format(i=(i+1), num=len(args.files), f=fname)
+                read_json((fname, of))
+            print "Finished. There were a total of {} fields that could not be extracted from the json file. These are: ".format(error_count)
+            pp.pprint(error_fields)
 
-# Whether or not to clear all the defaults or add time columns
-parser.add_argument('-nd', '--no_defaults', action="store_true", default=False,
-        help="Don't add any of the default fields to the CSV output")
-parser.add_argument('-ntc', '--no_time_columns', action="store_true", default=False,
-        help="Don't add the extra time columns to the CSV output")
+        else:
+            num_cores = mp.cpu_count()
+            print "Running as multiple processes on {cores} cores".format(cores=num_cores)
+            p = mp.Pool(num_cores) # A pool of worker processes
+            # Need to construct a list of tuples to pass as arguments to the read_json function
+            #args = [(f, of) for f in args.files]
+            files = [(f, None) for f in args.files]
+            csv = p.map(read_json, files) # csv will be a list. Each item is the contents of a json file
+            # NOTE: at the moment the whole result is stored in memory before being written. Could use
+            # p.map_async and provide a callback function to write results as they come in.
+            for item in csv: # Pool saves the result of each process in a list
+                of.write(item)
+            print "Finished. (Some fields might not have been written, but to see exactly which ones"+\
+                "might not have been written you need to run this with the --no_multi_thread argument)."
 
-# Whether to run multi-threaded
-parser.add_argument('-nmt', '--no_multi_thread', action="store_true", default=False,
-        help="Don't do the analysis in multiple threads")
-
-# Can include a bounding box and only include tweets within the box
-parser.add_argument('-bb', '--bounding_box', nargs=4, dest='bounding_box', type=float, required=False, default=None, \
-    help='specify min/max coordinates of bounding box (minx miny maxx maxy) and\n'+\
-             'only return tweets that have coordinates within this box.\n'+\
-             'Note: tweets without GPS coordinates will be ignored.')
-
-
-# Parse command-line arguments
-args = parser.parse_args()
-
-if args.no_defaults:
-    print "-nd specified: not extracting the default fields"
-    fields = []
-
-# Add any specified columns to the fields that we're interested in (if any)
-
-if args.field:
-    for fld in args.field:
-        fields.append(fld)
-
-
-if len(fields)==0:
-    print "No fields have been specified, you have probably set the '--no_defaults' flag "+\
-            "but not specified any of your own fields.\n"+\
-            "This is probably a mistake so I wont continue.\n"+\
-            "If you want to add fields yourself use --field"
-    sys.exit(1)
-
-# Check the bounding box. If no good then the script will exit
-if args.bounding_box != None:
-    check_bb(args.bounding_box)
-
-print "Will write output to: ",args.outfile
-
-print "Will extract data in the following json fields: ",fields
-
-print "Will {s} time columns".format(s="not add" if args.no_time_columns else "add")
-
-if args.bounding_box != None:
-    print "Will only return tweets withing the bounding box {}.".format(str(args.bounding_box))
-
-
-
-# ****** Start interrogating the tweet files (one tweet per line, possibly compressed) ******
-
-with open(args.outfile, 'w') as of:
-
-    # Prepare the output file
-    for field in fields:
-        of.write(field.replace(",","-") +", ") # (note: no commas in fieldnames)
-    # Also add the extra time columns (added for convenience)
-    if not args.no_time_columns:
-        of.write("Year, Month, Day, Hour, Minute, Second")
-    of.write("\n")
-
-    if args.no_multi_thread: # Run in a single thread
-        for i, fname in enumerate(args.files):
-            print "Interrogating file {i}/{num}: {f}".format(i=(i+1), num=len(args.files), f=fname)
-            read_json((fname, of))
-        print "Finished. There were a total of {} fields that could not be extracted from the json file. These are: ".format(error_count)
-        pp.pprint(error_fields)
-
-    else:
-        num_cores = mp.cpu_count()
-        print "Running as multiple processes on {cores} cores".format(cores=num_cores)
-        p = mp.Pool(num_cores) # A pool of worker processes
-        # Need to construct a list of tuples to pass as arguments to the read_json function
-        #args = [(f, of) for f in args.files]
-        files = [(f, None) for f in args.files]
-        csv = p.map(read_json, files) # csv will be a list. Each item is the contents of a json file
-        # NOTE: at the moment the whole result is stored in memory before being written. Could use
-        # p.map_async and provide a callback function to write results as they come in.
-        for item in csv: # Pool saves the result of each process in a list
-            of.write(item)
-        print "Finished. (Some fields might not have been written, but to see exactly which ones"+\
-            "might not have been written you need to run this with the --no_multi_thread argument)."
-
-print "Finished writing {args}".format(args=args.outfile)
+    print "Finished writing {args}".format(args=args.outfile)
 
