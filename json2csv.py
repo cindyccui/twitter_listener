@@ -120,8 +120,9 @@ def read_json((fname, of)):
             try:
                 tweet = json.loads(line) # Create a dictionary from the tweet on the current line
             except ValueError as e:
-                print "Warning: there was a problem parsing the json for the line: '{}'".format(\
-                        line)
+                error_count += 1
+                print "Warning: there was a problem parsing the json in file '{}' for the line: '{}'".format(\
+                        f.name, line)
                 print "That line will be ignored.\nError and stack trace are: {}\n{}".format(\
                         str(e), traceback.format_exc())
                 continue # Ignore that line           
